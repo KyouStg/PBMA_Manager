@@ -1,101 +1,266 @@
-import Image from "next/image";
+"use client";
+import { GetProxyInfo, GetSidInfo } from "@/libs/sidApi";
+import { invoke } from "@tauri-apps/api/tauri";
+import { useState } from "react";
+
+// エラーモーダルコンポーネント
+const ErrorModal = ({ message, onClose }: { message: string; onClose: () => void }) => {
+  return (
+    <div className="fixed top-0 left-0 w-full h-full bg-gray-500 bg-opacity-50 flex justify-center items-center z-50">
+      <div className="bg-white p-4 rounded shadow-lg max-w-md w-full">
+        <p className="mt-2 text-red-700 break-words whitespace-pre-line">{message}</p>
+        <button onClick={onClose} className="bg-blue-500 text-white mx-auto w-20 flex justify-center px-4 py-2 mt-4 rounded">
+          OK
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// モーダルコンポーネント
+const MessageModal = ({ message, onClose }: { message: string; onClose: () => void }) => {
+  return (
+    <div className="fixed top-0 left-0 w-full h-full bg-gray-500 bg-opacity-50 flex justify-center items-center z-50">
+      <div className="bg-white p-4 rounded shadow-lg max-w-md w-full">
+        <p className="mt-2 text-zinc-700 break-words whitespace-pre-line">{message}</p>
+        <button onClick={onClose} className="bg-blue-500 text-white mx-auto w-20 flex justify-center px-4 py-2 mt-4 rounded">
+          OK
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// 確認モーダル
+const ConfirmModal = ({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) => {
+  return (
+    <div className="fixed top-0 left-0 w-full h-full bg-gray-500 bg-opacity-50 flex justify-center items-center z-50">
+      <div className="bg-white p-4 rounded shadow-lg max-w-md w-full">
+        <p className="mt-2 text-zinc-700 break-words whitespace-pre-line">{message}</p>
+        <div className="flex gap-4 justify-center mt-4">
+          <button onClick={onConfirm} className="bg-blue-500 text-white w-20 flex justify-center px-4 py-2 rounded">
+            はい
+          </button>
+          <button onClick={onCancel} className="bg-blue-500 text-white w-20 flex justify-center px-4 py-2 rounded">
+            いいえ
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [sid, setSid] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [message, setMessage] = useState("");
+  const [confirmPluginMessage, setConfirmPluginMessage] = useState("");
+  const [confirmWindowMessage, setConfirmWindowMessage] = useState("");
+  const [confirmInitializeMessage, setConfirmInitializeMessage] = useState("");
+  const [isPluginLoading, setIsPluginLoading] = useState(false);
+  const [isInitLoading, setIsInitLoading] = useState(false);
+  const [bootWindowNum, setBootWindowNum] = useState<number | null>(null);
+  const [windowNumberToRegister, setWindowNumberToRegister] = useState<number | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  // SID 情報取得とプラグイン作成処理
+  const handleSidAndCreatePlugin = async () => {
+    if (!sid.trim()) {
+      setErrorMessage("SID を入力してください。");
+      return;
+    }
+    setConfirmPluginMessage(`プラグインを作成しますか？`)
+  }
+
+  const handlePluginConfirm = async () => {
+    try {
+      setIsPluginLoading(true);
+      setErrorMessage("");
+      
+      // SID 情報を取得
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { bootWindowNum }: any = await GetSidInfo(sid);
+      setBootWindowNum(bootWindowNum);
+      console.log(bootWindowNum);
+      // プラグイン作成処理
+      for (let wNum = 1; wNum <= bootWindowNum; wNum++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { proxyData }: any = await GetProxyInfo(sid, wNum.toString());
+        const { proxyIp, proxyPort, proxyUser , proxyPass } = proxyData;
+
+        await invoke("create_plugin", {
+          data: {
+            w_num: wNum,
+            proxy_ip: proxyIp,
+            proxy_port: proxyPort,
+            proxy_user: proxyUser,
+            proxy_pass: proxyPass,
+          },
+        });
+      }
+      setMessage(`プラグインの作成(${bootWindowNum})に成功しました。`);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } catch (error: any) {
+        console.log("Caught plugin error: ", error);
+        
+      } finally {
+        setIsPluginLoading(false);
+    }
+  };
+
+  // 窓登録処理
+  const handleRegisterWindow = (windowNumber: number) => {
+    setWindowNumberToRegister(windowNumber); // 窓番号をセット
+    setConfirmWindowMessage(`窓 ${windowNumber} を登録しますか？`); // 確認モーダルを表示
+  };
+
+
+  const handleWindowConfirm  = async () => {
+    console.log(bootWindowNum);
+    if (windowNumberToRegister === null) {
+      return;
+    }
+
+    try {
+      console.log(`Registering window ${windowNumberToRegister} for SID: ${sid}`);
+      await invoke("register_window", { windowNumber: windowNumberToRegister });
+      setMessage(`窓(${windowNumberToRegister})の登録に成功しました。`)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      console.log("Caught error: ", error);
+      if (error) {
+        // 'os error 32' を特定して、メッセージを設定
+        if (error.includes("os error 32")) {
+          setErrorMessage(`別のプロセスがリソースを使用中です。\n稼働中のChromeを閉じて再度お試しください。`);
+        } else if (error.includes("User Data directory does not exist")) {
+          setErrorMessage(`User Dataが見つかりませんでした。`);
+        }
+        else {
+          setErrorMessage(`窓 ${windowNumberToRegister} の登録に失敗しました: ${error}`);
+        }
+      } else {
+        setErrorMessage("予期しないエラーが発生しました");
+      }
+    }
+  };
+
+  // 初期化処理
+  const handleConfirmInitialization = () => {
+    setConfirmInitializeMessage("本当に初期化しますか？");
+  };
+
+  // 初期化処理を呼び出す関数
+  const handleInitializeChrome = async () => {
+    try {
+      setIsInitLoading(true);
+      setErrorMessage("");
+
+      // 初期化処理
+      await invoke("initialize_chrome_data");
+      setMessage("初期化されました。");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      console.log("Caught error: ", error);
+      if (error) {
+        // 'os error 32' を特定して、メッセージを設定
+        if (error.includes("os error 32")) {
+          setErrorMessage(`別のプロセスがリソースを使用中です。\n稼働中のChromeを閉じて再度お試しください。`);
+        } else if (error.includes("Chrome directory does not exist")) {
+          setErrorMessage(`Chromeが見つかりませんでした。`);
+        }
+        else {
+          setErrorMessage("初期化に失敗しました。");
+        }
+      } else {
+        setErrorMessage("予期しないエラーが発生しました");
+      }
+    
+    } finally {
+      setIsInitLoading(false);
+    }
+  };
+
+
+  return (
+    <div className="flex flex-col w-screen h-screen justify-center items-center p-4 bg-white text-black">
+      <h1 className="text-xl font-bold pb-4">PBMA Manager</h1>
+
+      {/* SID 入力フォーム */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="SID を入力..."
+          value={sid}
+          onChange={(e) => setSid(e.target.value)}
+          className="border p-2 rounded w-64"
+        />
+        <button
+          onClick={handleSidAndCreatePlugin}
+          className="bg-green-800 text-white px-4 py-2 rounded disabled:opacity-50"
+          disabled={isPluginLoading}
+        >
+          {isPluginLoading ? "処理中..." : "プラグイン作成"}
+        </button>
+      </div>
+
+      {/* メッセージ表示 */}
+      {errorMessage && <ErrorModal message={errorMessage} onClose={() => setErrorMessage("")} />}
+      {message && <MessageModal message={message} onClose={() => setMessage("")} />}
+      {confirmPluginMessage && (
+        <ConfirmModal
+          message={confirmPluginMessage}
+          onConfirm={() => {
+            setConfirmPluginMessage("");
+            handlePluginConfirm();
+          }}
+          onCancel={() => {
+            setConfirmPluginMessage("");
+          }}
+        />
+      )}
+      {confirmWindowMessage && (
+        <ConfirmModal
+          message={confirmWindowMessage}
+          onConfirm={() => {
+            setConfirmWindowMessage(""); // モーダルを閉じる
+            handleWindowConfirm();
+          }}
+          onCancel={() => setConfirmWindowMessage("")}
+        />
+      )}
+      {confirmInitializeMessage && (
+        <ConfirmModal
+          message={confirmInitializeMessage}
+          onConfirm={() => {
+            setConfirmInitializeMessage(""); // モーダルを閉じる
+            handleInitializeChrome();
+          }}
+          onCancel={() => setConfirmInitializeMessage("")}
+        />
+      )}
+
+      {/* 窓登録ボタン */}
+      <div className="grid grid-cols-4 gap-2 mt-4">
+        {Array.from({ length: 20 }, (_, i) => i).map((i) => (
+          <button
+            key={i}
+            onClick={() => handleRegisterWindow(i + 1)}
+            className="bg-blue-700 text-white px-4 py-2 rounded"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+            窓 {i + 1} を登録
+          </button>
+        ))}
+      </div>
+      <button
+          onClick={handleConfirmInitialization}
+          className="bg-orange-500 text-white px-4 py-2 rounded disabled:opacity-50 mt-10"
+          disabled={isInitLoading}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          {isInitLoading ? "初期化中..." : "初期化"}
+        </button>
     </div>
   );
 }
